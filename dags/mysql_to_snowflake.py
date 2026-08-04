@@ -14,7 +14,7 @@ def connection_test():
 
     @task
     def test_mysql():
-        hook = MySqlHook(mysql_conn_id="mysql_test")
+        hook = MySqlHook(mysql_conn_id="mysql_conn")
         conn = hook.get_conn()
 
         cursor = conn.cursor()
@@ -25,7 +25,7 @@ def connection_test():
 
     @task
     def test_snowflake():
-        hook = SnowflakeHook(snowflake_conn_id="snowflake_test")
+        hook = SnowflakeHook(snowflake_conn_id="snowflake_conn")
         conn = hook.get_conn()
 
         cursor = conn.cursor()
