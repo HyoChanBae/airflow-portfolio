@@ -14,7 +14,7 @@ def mysql_to_snowflake_customers():
 
     @task
     def extract_from_mysql():
-        """1. MySQL에서 customers 테이블 데이터 Extract"""
+        """MySQL에서 테이블 스키마(컬럼명/타입)와 데이터 동시 추출"""
         mysql_hook = MySqlHook(mysql_conn_id="mysql_conn")
         
         sql = "SELECT * FROM customers"
@@ -23,35 +23,46 @@ def mysql_to_snowflake_customers():
             with conn.cursor() as cursor:
                 cursor.execute(sql)
                 rows = cursor.fetchall()
-                print(f"Extracted {len(rows)} rows from MySQL.")
-                return rows
+                # 컬럼명 추출
+                columns = [desc[0] for desc in cursor.description]
+                
+                print(f"Extracted {len(rows)} rows from MySQL with columns: {columns}")
+                return {"columns": columns, "rows": rows}
 
     @task
-    def load_to_snowflake(rows):
-        """2. Snowflake의 CUSTOMERS 테이블로 Load"""
+    def load_to_snowflake(data):
+        """Snowflake에 테이블이 없으면 자동 생성 후 데이터 Load"""
+        rows = data["rows"]
+        columns = data["columns"]
+        
         if not rows:
             print("No data to load.")
             return
 
         sf_hook = SnowflakeHook(snowflake_conn_id="snowflake_conn")
-        
-        # Snowflake의 target 테이블명 (Database.Schema.Table)
         target_table = "DEMO_RAW_DB.RAW.CUSTOMERS"
         
-        # executemany 방식으로 튜플/리스트 데이터를 한 번에 Insert
         with sf_hook.get_conn() as conn:
             with conn.cursor() as cursor:
-                # 테이블 컬럼 개수/순서에 맞게 %s 개수를 맞춰주세요 (예: 컬럼이 5개인 경우)
-                # target 테이블의 컬럼 수를 파악하여 %s 개수를 맞춰주시면 됩니다.
-                placeholders = ",".join(["%s"] * len(rows[0]))
-                insert_sql = f"INSERT INTO {target_table} VALUES ({placeholders})"
+                # 1. 테이블이 없을 경우를 대비해 CREATE TABLE IF NOT EXISTS 실행
+                # Snowflake에서는 VARCHAR 타입으로 유연하게 받아두는 것이 가장 안전합니다.
+                cols_schema = ", ".join([f'"{col.upper()}" VARCHAR' for col in columns])
+                create_table_sql = f"CREATE TABLE IF NOT EXISTS {target_table} ({cols_schema})"
+                
+                print(f"Executing: {create_table_sql}")
+                cursor.execute(create_table_sql)
+                
+                # 2. Insert 구문 생성 및 실행
+                placeholders = ", ".join(["%s"] * len(columns))
+                col_names = ", ".join([f'"{col.upper()}"' for col in columns])
+                insert_sql = f"INSERT INTO {target_table} ({col_names}) VALUES ({placeholders})"
                 
                 cursor.executemany(insert_sql, rows)
-                print(f"Successfully inserted {len(rows)} rows into Snowflake.")
+                print(f"Successfully loaded {len(rows)} rows into {target_table}.")
 
-    # Task 실행 흐름 정의
-    customer_data = extract_from_mysql()
-    load_to_snowflake(customer_data)
+    # Task 흐름 연결
+    extracted_data = extract_from_mysql()
+    load_to_snowflake(extracted_data)
 
 
 mysql_to_snowflake_customers()
