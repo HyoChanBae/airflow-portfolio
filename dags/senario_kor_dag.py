@@ -7,18 +7,18 @@ from datetime import datetime
 
 @dag(
     start_date=pendulum.datetime(2026, 8, 1, tz="Asia/Seoul"),
-    schedule="30 9,11,13,15 * * *",
+    schedule="30 9,11,14 * * *",
     catchup=False,
     tags=["senario_trade"]
 )
 def report_dag():
 
     run_agent = SimpleHttpOperator(
-        task_id="run_report_agent",
+        task_id="trade_kor_agent",
 
         http_conn_id="trading_agent_api",
 
-        endpoint="report-batch",
+        endpoint="senario-batch-kor",
 
         method="POST",
 
