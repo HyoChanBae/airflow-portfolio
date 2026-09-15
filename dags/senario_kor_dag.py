@@ -11,7 +11,7 @@ from datetime import datetime
     catchup=False,
     tags=["senario_trade"]
 )
-def report_dag():
+def senario_kor_dag():
 
     run_agent = SimpleHttpOperator(
         task_id="trade_kor_agent",
@@ -31,5 +31,4 @@ def report_dag():
             response.status_code == 200
     )
 
-
-report_dag()
+senario_kor_dag()
