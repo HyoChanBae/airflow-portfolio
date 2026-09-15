@@ -1,3 +1,4 @@
+import pendulum
 from airflow.decorators import dag
 from airflow.providers.http.operators.http import SimpleHttpOperator
 
@@ -5,8 +6,10 @@ from datetime import datetime
 
 
 @dag(
-    start_date=datetime(2026, 8, 1),
-    schedule="0 9 * * 1-5",
+    start_date=pendulum.datetime(2026, 8, 1, tz="Asia/Seoul"),
+    #schedule="0 9 * * 1-5",
+    #schedule="*/10 * * * *",
+    schedule="0 8,17,20 * * *",
     catchup=False,
     tags=["report"]
 )
