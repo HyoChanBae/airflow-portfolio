@@ -284,7 +284,10 @@ def update_bot_trade_current_info():
                                 S.CURRENT_PRICE,
 
                             T.UPDATE_DT =
-                                CURRENT_TIMESTAMP()
+                                CONVERT_TIMEZONE(
+                                    'Asia/Seoul',
+                                    CURRENT_TIMESTAMP()
+                                )::TIMESTAMP_NTZ
 
                     WHEN NOT MATCHED THEN
                         INSERT (
@@ -298,8 +301,14 @@ def update_bot_trade_current_info():
                             S.SYMBOL,
                             S.SYMBOL_NAME,
                             S.CURRENT_PRICE,
-                            CURRENT_TIMESTAMP(),
-                            CURRENT_TIMESTAMP()
+                            CONVERT_TIMEZONE(
+                                'Asia/Seoul',
+                                CURRENT_TIMESTAMP()
+                            )::TIMESTAMP_NTZ,
+                            CONVERT_TIMEZONE(
+                                'Asia/Seoul',
+                                CURRENT_TIMESTAMP()
+                            )::TIMESTAMP_NTZ
                         )
                 """
 
