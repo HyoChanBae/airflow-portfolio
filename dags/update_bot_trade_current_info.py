@@ -116,7 +116,8 @@ def get_yfinance_symbol_and_ticker(symbol: str):
         f"현재가를 가져올 수 없습니다: {symbol}"
     )
 
-
+    # 지정 시간 별 0은 분 schedule="0 8,17,20 * * *",
+    # 2시간 마다 schedule="0 */2 * * *",
 @dag(
     dag_id="update_bot_trade_current_info",
     start_date=pendulum.datetime(
@@ -125,7 +126,7 @@ def get_yfinance_symbol_and_ticker(symbol: str):
         1,
         tz="Asia/Seoul"
     ),
-    schedule="0 8,17,20 * * *",
+    schedule="0 */2 * * 1-6", #2시간마다 일요일 제외
     catchup=False,
     tags=[
         "stock",
