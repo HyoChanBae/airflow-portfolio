@@ -150,9 +150,16 @@ def update_bot_trade_current_info():
         # ==========================================
         rows = hook.get_records(
             """
-            SELECT DISTINCT SYMBOL
-            FROM DEMO_RAW_DB.RAW.BOT_TRADE
-            WHERE SYMBOL IS NOT NULL
+            SELECT * FROM (
+                SELECT DISTINCT SYMBOL
+                FROM DEMO_RAW_DB.RAW.BOT_TRADE
+                WHERE SYMBOL IS NOT NULL
+                UNION ALL 
+                SELECT DISTINCT SYMBOL
+                FROM DEMO_RAW_DB.RAW.BOT_TRADE_SENARIO
+                WHERE SYMBOL IS NOT NULL    
+			)
+			GROUP BY SYMBOL
             """
         )
 
