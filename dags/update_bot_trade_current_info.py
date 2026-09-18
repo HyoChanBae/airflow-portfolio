@@ -109,6 +109,51 @@ def get_yfinance_symbol_name(ticker, symbol: str) -> str:
     return symbol_name
 
 
+def get_valid_kr_equity_ticker(yf_symbol: str):
+    """
+    Yahoo 한국 티커가 실제 주식인지 확인.
+
+    last_price 만 보면 067630.KS 처럼
+    MUTUALFUND 오염 시세(11250)도 통과한다.
+    """
+    ticker = yf.Ticker(yf_symbol)
+
+    try:
+        fast_info = ticker.fast_info
+        price = fast_info["last_price"]
+    except Exception as e:
+        print(
+            f"[YF CHECK FAIL] "
+            f"{yf_symbol} / {e}"
+        )
+        return None
+
+    if price is None:
+        print(
+            f"[YF CHECK FAIL] "
+            f"{yf_symbol} / last_price is None"
+        )
+        return None
+
+    try:
+        quote_type = str(
+            fast_info["quote_type"] or ""
+        ).upper()
+    except Exception:
+        quote_type = ""
+
+    if quote_type and quote_type != "EQUITY":
+        print(
+            f"[INVALID QUOTE] "
+            f"{yf_symbol} "
+            f"quote_type={quote_type} "
+            f"last_price={price}"
+        )
+        return None
+
+    return ticker
+
+
 def get_yfinance_symbol_and_ticker(symbol: str):
     """
     DB의 SYMBOL을 받아서 Yahoo Finance용 symbol과 ticker 객체 반환
@@ -118,7 +163,7 @@ def get_yfinance_symbol_and_ticker(symbol: str):
 
     한국 종목:
         005930 -> 005930.KS 먼저 시도
-        실패하면 005930.KQ 시도
+        유효한 주식이 아니면 005930.KQ 시도
     """
 
     symbol = str(symbol).strip()
@@ -127,16 +172,27 @@ def get_yfinance_symbol_and_ticker(symbol: str):
     # 이미 Yahoo Finance 형식인 경우
     # ==========================================
     if symbol.endswith(".KS") or symbol.endswith(".KQ"):
-        ticker = yf.Ticker(symbol)
+        ticker = get_valid_kr_equity_ticker(symbol)
 
-        try:
-            price = ticker.fast_info["last_price"]
+        if ticker is not None:
+            return symbol, ticker
 
-            if price is not None:
-                return symbol, ticker
+        alt_suffix = (
+            ".KQ" if symbol.endswith(".KS") else ".KS"
+        )
+        alt_symbol = (
+            f"{symbol.rsplit('.', 1)[0]}{alt_suffix}"
+        )
+        alt_ticker = get_valid_kr_equity_ticker(
+            alt_symbol
+        )
 
-        except Exception:
-            pass
+        if alt_ticker is not None:
+            print(
+                f"[MARKET FALLBACK] "
+                f"{symbol} -> {alt_symbol}"
+            )
+            return alt_symbol, alt_ticker
 
         raise ValueError(
             f"Yahoo Finance에서 종목을 찾을 수 없습니다: {symbol}"
@@ -152,49 +208,36 @@ def get_yfinance_symbol_and_ticker(symbol: str):
         # 1. KOSPI 시도
         # --------------------------------------
         ks_symbol = f"{symbol}.KS"
+        ks_ticker = get_valid_kr_equity_ticker(
+            ks_symbol
+        )
 
-        try:
-            ks_ticker = yf.Ticker(ks_symbol)
-
-            ks_price = ks_ticker.fast_info["last_price"]
-
-            if ks_price is not None:
-                print(
-                    f"[MARKET DETECT] "
-                    f"{symbol} -> KOSPI ({ks_symbol})"
-                )
-
-                return ks_symbol, ks_ticker
-
-        except Exception as e:
+        if ks_ticker is not None:
             print(
-                f"[KOSPI CHECK FAIL] "
-                f"{ks_symbol} / {e}"
+                f"[MARKET DETECT] "
+                f"{symbol} -> KOSPI ({ks_symbol})"
             )
+            return ks_symbol, ks_ticker
+
+        print(
+            f"[KOSPI CHECK FAIL] "
+            f"{ks_symbol} -> KOSDAQ 시도"
+        )
 
         # --------------------------------------
         # 2. KOSDAQ 시도
         # --------------------------------------
         kq_symbol = f"{symbol}.KQ"
+        kq_ticker = get_valid_kr_equity_ticker(
+            kq_symbol
+        )
 
-        try:
-            kq_ticker = yf.Ticker(kq_symbol)
-
-            kq_price = kq_ticker.fast_info["last_price"]
-
-            if kq_price is not None:
-                print(
-                    f"[MARKET DETECT] "
-                    f"{symbol} -> KOSDAQ ({kq_symbol})"
-                )
-
-                return kq_symbol, kq_ticker
-
-        except Exception as e:
+        if kq_ticker is not None:
             print(
-                f"[KOSDAQ CHECK FAIL] "
-                f"{kq_symbol} / {e}"
+                f"[MARKET DETECT] "
+                f"{symbol} -> KOSDAQ ({kq_symbol})"
             )
+            return kq_symbol, kq_ticker
 
         raise ValueError(
             f"KOSPI/KOSDAQ 모두 조회 실패: {symbol}"
