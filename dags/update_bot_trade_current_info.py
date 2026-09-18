@@ -5,6 +5,110 @@ from airflow.decorators import dag, task
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
 
 
+def is_korean_symbol(symbol: str) -> bool:
+    """6자리 숫자 종목코드 또는 Yahoo 한국 거래소 접미사."""
+    symbol = str(symbol).strip().upper()
+
+    if symbol.endswith(".KS") or symbol.endswith(".KQ"):
+        return True
+
+    return symbol.isdigit() and len(symbol) == 6
+
+
+def normalize_short_code(code: str) -> str:
+    """
+    STOCK_MASTER.SHORT_CODE / BOT_TRADE.SYMBOL 을
+    6자리 종목코드로 정규화.
+
+    예:
+        067630, A067630, 067630.KS, 67630 -> 067630
+    """
+    code = str(code).strip().upper()
+
+    if code.endswith(".KS") or code.endswith(".KQ"):
+        code = code.rsplit(".", 1)[0]
+
+    if code.startswith("A") and len(code) == 7 and code[1:].isdigit():
+        code = code[1:]
+
+    if code.isdigit():
+        return code.zfill(6)
+
+    return code
+
+
+def load_stock_name_map(hook: SnowflakeHook) -> dict:
+    """SHORT_CODE -> STOCK_NAME 맵."""
+    rows = hook.get_records(
+        """
+        SELECT
+            SHORT_CODE,
+            STOCK_NAME
+        FROM DEMO_RAW_DB.RAW.STOCK_MASTER
+        WHERE SHORT_CODE IS NOT NULL
+          AND STOCK_NAME IS NOT NULL
+        """
+    )
+
+    stock_name_map = {}
+
+    for short_code, stock_name in rows:
+        if short_code is None or stock_name is None:
+            continue
+
+        key = normalize_short_code(short_code)
+        name = str(stock_name).strip()
+
+        if key and name:
+            stock_name_map[key] = name
+
+    print("==========================================")
+    print("STOCK_MASTER 종목명 맵 로드")
+    print(f"총 종목 수: {len(stock_name_map)}")
+    print("==========================================")
+
+    return stock_name_map
+
+
+def get_yfinance_symbol_name(ticker, symbol: str) -> str:
+    """미국/해외 종목용 Yahoo Finance 종목명. 식별자 나열 값은 버린다."""
+    try:
+        info = ticker.info
+
+        symbol_name = (
+            info.get("shortName")
+            or info.get("longName")
+            or symbol
+        )
+
+    except Exception as e:
+        print(
+            f"[WARNING] "
+            f"종목명 조회 실패: "
+            f"{symbol} / {e}"
+        )
+        return symbol
+
+    if not symbol_name:
+        return symbol
+
+    symbol_name = str(symbol_name).strip()
+
+    # Yahoo가 회사명 대신 "067630.KS,0P0000N5S4,872655"
+    # 처럼 식별자를 콤마로 이어 붙인 값을 주는 경우가 있다.
+    if "," in symbol_name or symbol_name.upper().startswith(
+        str(symbol).strip().upper()
+    ):
+        print(
+            f"[WARNING] "
+            f"Yahoo 종목명이 식별자 형식입니다: "
+            f"{symbol_name}"
+        )
+        return symbol
+
+    return symbol_name
+
+
 def get_yfinance_symbol_and_ticker(symbol: str):
     """
     DB의 SYMBOL을 받아서 Yahoo Finance용 symbol과 ticker 객체 반환
@@ -176,6 +280,8 @@ def update_bot_trade_current_info():
         print(f"총 종목 수: {len(symbols)}")
         print("==========================================")
 
+        stock_name_map = load_stock_name_map(hook)
+
         success_count = 0
         fail_count = 0
 
@@ -206,26 +312,32 @@ def update_bot_trade_current_info():
 
                 # ==================================
                 # 종목명
+                # 국내: STOCK_MASTER.STOCK_NAME
+                # 해외: Yahoo Finance shortName
                 # ==================================
-                try:
+                if is_korean_symbol(symbol):
+                    kr_code = normalize_short_code(symbol)
+                    symbol_name = stock_name_map.get(kr_code)
 
-                    info = ticker.info
-
-                    symbol_name = (
-                        info.get("shortName")
-                        or info.get("longName")
-                        or symbol
+                    if symbol_name:
+                        print(
+                            f"[STOCK MASTER] "
+                            f"{kr_code} -> {symbol_name}"
+                        )
+                    else:
+                        print(
+                            f"[WARNING] "
+                            f"STOCK_MASTER에 없음: {kr_code}"
+                        )
+                        symbol_name = get_yfinance_symbol_name(
+                            ticker,
+                            symbol
+                        )
+                else:
+                    symbol_name = get_yfinance_symbol_name(
+                        ticker,
+                        symbol
                     )
-
-                except Exception as e:
-
-                    print(
-                        f"[WARNING] "
-                        f"종목명 조회 실패: "
-                        f"{symbol} / {e}"
-                    )
-
-                    symbol_name = symbol
 
                 # ==================================
                 # 현재가
