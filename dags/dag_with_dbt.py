@@ -25,7 +25,7 @@ def dag_with_dbt():
         ),
         profile_config=ProfileConfig(
             profile_name="portfolio",
-            target_name="dev",
+            target_name="dw",
             profiles_yml_filepath="/opt/airflow/.dbt/profiles.yml",
         ),
         render_config=RenderConfig(

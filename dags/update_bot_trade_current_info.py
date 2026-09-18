@@ -126,7 +126,7 @@ def get_yfinance_symbol_and_ticker(symbol: str):
         1,
         tz="Asia/Seoul"
     ),
-    schedule="0 */2 * * 1-6", #2시간마다 일요일 제외
+    schedule="*/30 * * * 1-6", #30분마다 일요일 제외
     catchup=False,
     tags=[
         "stock",
