@@ -19,4 +19,7 @@ apache-airflow-providers-snowflake \
 apache-airflow-providers-amazon \
 dbt-core==1.7.0 \
 dbt-mysql==1.7.0 \
-dbt-postgres==1.7.0  
+dbt-postgres==1.7.0 \
+dbt-snowflake==1.7.0
+
+RUN pip install --no-cache-dir yfinance
