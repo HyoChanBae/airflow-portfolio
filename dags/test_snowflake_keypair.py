@@ -6,7 +6,7 @@ from datetime import datetime
 
 def test_snowflake():
     hook = SnowflakeHook(
-        snowflake_conn_id="snowflake_keypair"
+        snowflake_conn_id="snowflake_conn3"
     )
 
     conn = hook.get_conn()
