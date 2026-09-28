@@ -290,7 +290,7 @@ def update_bot_trade_current_info():
         # Snowflake 연결
         # ==========================================
         hook = SnowflakeHook(
-            snowflake_conn_id="snowflake_conn2"
+            snowflake_conn_id="snowflake_conn3"
         )
 
         # ==========================================

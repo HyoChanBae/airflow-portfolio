@@ -39,7 +39,7 @@ def mysql_to_snowflake_customers():
             print("No data to load.")
             return
 
-        sf_hook = SnowflakeHook(snowflake_conn_id="snowflake_conn")
+        sf_hook = SnowflakeHook(snowflake_conn_id="snowflake_conn3")
         target_table = "DEMO_RAW_DB.RAW.CUSTOMERS"
         
         with sf_hook.get_conn() as conn:

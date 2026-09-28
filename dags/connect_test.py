@@ -25,7 +25,7 @@ def connection_test():
 
     @task
     def test_snowflake():
-        hook = SnowflakeHook(snowflake_conn_id="snowflake_conn")
+        hook = SnowflakeHook(snowflake_conn_id="snowflake_conn3")
         conn = hook.get_conn()
 
         cursor = conn.cursor()
