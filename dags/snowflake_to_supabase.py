@@ -31,6 +31,8 @@ SUPABASE_CONN_ID = "supabase_postgres"
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 VALID_WRITE_MODES = {"append", "replace", "truncate", "upsert"}
 JSON_TYPES = {"ARRAY", "OBJECT", "VARIANT", "VECTOR"}
+TIMESTAMP_WITH_TIME_ZONE_TYPES = {"TIMESTAMP_TZ", "TIMESTAMP_LTZ"}
+TIMESTAMP_WITHOUT_TIME_ZONE_TYPES = {"DATETIME", "TIMESTAMP", "TIMESTAMP_NTZ"}
 
 
 @dataclass(frozen=True)
@@ -138,9 +140,9 @@ def _snowflake_type_to_postgres(column: dict[str, Any]) -> str:
         return "DATE"
     if data_type == "TIME":
         return "TIME"
-    if data_type in {"TIMESTAMP_TZ", "TIMESTAMP_LTZ"}:
+    if data_type in TIMESTAMP_WITH_TIME_ZONE_TYPES:
         return "TIMESTAMPTZ"
-    if data_type in {"DATETIME", "TIMESTAMP", "TIMESTAMP_NTZ"}:
+    if data_type in TIMESTAMP_WITHOUT_TIME_ZONE_TYPES:
         return "TIMESTAMP"
     if data_type in {"BINARY", "VARBINARY"}:
         return "BYTEA"
@@ -304,6 +306,34 @@ def _adapt_row(row: tuple[Any, ...], json_indexes: set[int]) -> tuple[Any, ...]:
     return tuple(values)
 
 
+def _build_snowflake_select_list(source_columns: list[dict[str, Any]]) -> str:
+    """Return a projection that avoids Python connector timestamp decoding bugs.
+
+    Some connector/result-format combinations expose nanosecond timestamps as a
+    seconds-since-epoch value and Snowflake rejects the result before fetchmany
+    can read it. Formatting timestamps server-side preserves their declared
+    semantics, and PostgreSQL then coerces the ISO text into the target timestamp
+    column during INSERT.
+    """
+    expressions = []
+    for column in source_columns:
+        column_name = _quote_snowflake_identifier(column["name"])
+        data_type = column["data_type"].upper()
+        if data_type in TIMESTAMP_WITH_TIME_ZONE_TYPES:
+            expressions.append(
+                f"TO_VARCHAR({column_name}, "
+                f"'YYYY-MM-DD\"T\"HH24:MI:SS.FF9 TZH:TZM') AS {column_name}"
+            )
+        elif data_type in TIMESTAMP_WITHOUT_TIME_ZONE_TYPES:
+            expressions.append(
+                f"TO_VARCHAR({column_name}, "
+                f"'YYYY-MM-DD\"T\"HH24:MI:SS.FF9') AS {column_name}"
+            )
+        else:
+            expressions.append(column_name)
+    return ", ".join(expressions)
+
+
 def _migrate_table(
     snowflake_cursor: Any,
     postgres_connection: Any,
@@ -311,6 +341,10 @@ def _migrate_table(
     config: TableConfig,
 ) -> int:
     source_columns = _get_snowflake_columns(snowflake_cursor, config)
+    LOGGER.info(
+        "Snowflake source column types: %s",
+        [(column["name"], column["data_type"]) for column in source_columns],
+    )
     target_columns = _target_column_names(source_columns, config.lowercase_columns)
     _prepare_target_table(postgres_cursor, config, source_columns, target_columns)
     insert_statement = _build_insert_statement(postgres_connection, config, target_columns)
@@ -323,7 +357,19 @@ def _migrate_table(
     if not config.source_case_sensitive:
         source_parts = [part.upper() for part in source_parts]
     source_name = ".".join(_quote_snowflake_identifier(part) for part in source_parts)
-    snowflake_cursor.execute(f"SELECT * FROM {source_name}")
+    select_list = _build_snowflake_select_list(source_columns)
+    timestamp_columns = [
+        column["name"]
+        for column in source_columns
+        if column["data_type"].upper()
+        in TIMESTAMP_WITH_TIME_ZONE_TYPES | TIMESTAMP_WITHOUT_TIME_ZONE_TYPES
+    ]
+    if timestamp_columns:
+        LOGGER.info(
+            "Formatting Snowflake timestamp columns as ISO text: %s",
+            timestamp_columns,
+        )
+    snowflake_cursor.execute(f"SELECT {select_list} FROM {source_name}")
 
     json_indexes = {
         index

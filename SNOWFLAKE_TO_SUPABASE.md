@@ -91,3 +91,6 @@ Upsert 설정 예시:
   있습니다. 재실행 가능성이 있으면 PK를 지정한 `upsert`를 사용하세요. 이 문제를
   피하기 위해 DAG 태스크의 자동 retry는 비활성화되어 있습니다.
 - `replace`/`truncate`는 적재 후 행 수를 검증합니다.
+- Snowflake Python Connector가 나노초 TIMESTAMP를 epoch 초 값으로 잘못 해석하는
+  경우를 피하기 위해 TIMESTAMP 계열 컬럼은 Snowflake에서 ISO 문자열로 변환한 뒤
+  PostgreSQL의 `TIMESTAMP`/`TIMESTAMPTZ` 컬럼에 적재합니다.
