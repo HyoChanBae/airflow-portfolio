@@ -1,7 +1,6 @@
 import os
 
 import pendulum
-import requests
 from airflow.decorators import dag, task
 from supabase import Client, create_client
 
@@ -23,27 +22,15 @@ def get_supabase_client() -> Client:
 
 
 def test_connection() -> int:
-    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/"
-
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-    }
-
-    response = requests.get(
-        url,
-        headers=headers,
-        timeout=15,
+    response = (
+        get_supabase_client()
+        .schema("public")
+        .table("stock_master")
+        .select("short_code")
+        .limit(1)
+        .execute()
     )
-
-    print("SUPABASE_URL =", SUPABASE_URL)
-    print("KEY_PREFIX =", SUPABASE_KEY[:15] if SUPABASE_KEY else None)
-    print("STATUS =", response.status_code)
-    print("BODY =", response.text[:1000])
-
-    response.raise_for_status()
-
-    return response.status_code
+    return len(response.data)
 
 
 @dag(
@@ -60,11 +47,11 @@ def test_supabase_client():
 
     @task
     def check_connection():
-        status_code = test_connection()
+        row_count = test_connection()
 
         print(
-            f"Supabase connection OK: "
-            f"status_code={status_code}"
+            "Supabase stock_master connection OK: "
+            f"returned_rows={row_count}"
         )
 
     check_connection()
