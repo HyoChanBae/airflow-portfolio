@@ -25,5 +25,7 @@ dbt-snowflake==1.7.0
 RUN pip install --no-cache-dir \
 yfinance \
 icalendar \
+python-dotenv \
 requests \
+supabase \
 psycopg2-binary

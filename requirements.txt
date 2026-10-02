@@ -1,3 +1,5 @@
 astronomer-cosmos
 icalendar
+python-dotenv
 requests
+supabase
